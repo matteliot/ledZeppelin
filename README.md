@@ -26,6 +26,11 @@ Signal chain (mono in from the left input, stereo out):
 | Plexi | light yellow | light blue |
 | Tone Bender | red | magenta |
 
+## Install
+
+Download [`release/led_zeppelin.endl`](release/led_zeppelin.endl) (on GitHub: open it and click the download button), connect the Endless
+to your computer over USB and copy the file onto the pedal. Nothing needs to be built. To rebuild it from source, see below.
+
 ## Build
 
 ```sh
