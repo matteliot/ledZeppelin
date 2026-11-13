@@ -21,6 +21,8 @@ It is kept up to date as new requirements are given. Requirements are listed in 
 5. Keep `ai.md` lines unwrapped: only wrap where needed, or at a natural word break around 200 characters.
 6. As in ironButterfly (its requirement 6), turning the drive knob (here Gain) down must actually clean up chords and ringing notes, like rolling back the guitar, while the volume across the knob stays roughly level.
 
+7. The demo's guitar sounded fake ("like MIDI"): plain Karplus-Strong noise plucks, out of tune up high, robotic timing. Make the demo guitar realistic by modelling it better (not by using samples), then re-render `samples/led_zeppelin_demo.wav`.
+
 ### Implementation decisions (needed to recreate requirement 2)
 
 - **Toolchain and packaging (copied from `../ironButterfly`).**
@@ -60,6 +62,21 @@ It is kept up to date as new requirements are given. Requirements are listed in 
   - Knobs: Gain (default 0.8), Room (default 0.4), Level (default 0.75).
   - Press: Tone Bender on/off. Hold: Echoplex echo on/off. Both start off (plain Plexi).
   - LED: Plexi light yellow, Plexi+echo light blue, Tone Bender red, Tone Bender+echo magenta. Red also means the working buffer is missing.
-- **Host audition.** `cargo sim` renders an *original* E-minor blues-rock riff at 96 bpm, not any actual Led Zeppelin riff, using Karplus-Strong.
-  - It plays Plexi riff ×2 → Gain 0.35 with ringing chords → Gain back to default with the Tone Bender riff → Plexi + Echoplex lead line → echo off with a chord as the repeats ring out.
+- **Host audition.** `cargo sim` renders an *original* E-minor blues-rock riff at 96 bpm, not any actual Led Zeppelin riff, on the modelled guitar below.
+  - It plays Plexi riff ×2 (palm-muted chugs, accented notes ringing, vibrato on long notes) → Gain 0.35 with strummed open chords (downstroke, lighter upstroke) → Gain back to default with the Tone Bender riff → Plexi + Echoplex lead line (a slide in, a whole-step bend, vibrato) → echo off with a chord as the repeats ring out.
+  - Every event's timing is nudged by up to ±7 ms, repeatably.
   - It writes `target/render/led_zeppelin_demo.wav`, prints per-section stats and the Gain sweep above, and fails on NaN or full-scale output.
+
+### Implementation decisions (needed to recreate requirement 7): the guitar model, `src/guitar.rs` (host only)
+
+- **String.** Extended Karplus-Strong per note: a 4096-sample delay line read with 4-point Lagrange interpolation, so the loop delay is fractional. The loop has a one-zero loss filter `g·((1-s)·y + s·y₋₁)`, and the read delay is `SR/f - s`, so every note is in tune (measured within 0.2 cents from E2 to B5; the old integer-length string was up to ~16 cents flat).
+  - Loop gain per period `g = 10^(-3 / (T60·f))`. Held T60 = `6·sqrt(82.41/f)` s, clamped to 1.8–6 s. Palm mute: T60 0.18 s, s = 0.5. Otherwise s = 0.18 + 0.12·(1 - velocity).
+  - Releasing a note (the next note, unless it's allowed to ring) switches T60 to 0.06 s.
+  - Two polarizations: the second is detuned +0.7 cents, decays at 0.8× the T60, and is mixed at 0.45.
+- **Pick.** The excitation is one period of one-pole low-passed noise at 1.2 kHz + 6 kHz × velocity (×0.45 when palm muted), combed at the picking position (0.16 ± 0.04 of the string, random per note), with the mean removed and normalized to 0.12 × velocity RMS. Plus a click: 96 samples of differentiated noise × 0.015 × velocity, decaying over 20 samples.
+  - Attack pitch: +7 cents × velocity, decaying with a 50 ms time constant.
+- **Pitch movement (cents).** Vibrato 5.3 Hz, ±18 cents, fading in after 0.22 s over 0.35 s. Bend: smoothstep to the target over its duration. Slide: from N semitones below, smoothstep over its duration.
+- **Pickup.** Each polarization is heard as `y - y(0.075·period)` (a bridge humbucker comb). The sum is ×0.55, then a 4.3 kHz low-pass with Q 1.3 (pickup and cable resonance) and HP 60 Hz.
+- **Player.** A note can override its T60 (a fret-hand-muted "chk", or a chord sustained in front of a loud amp). Velocity varies ±12% per note, and onsets by up to 1.5 ms. Chords strum low to high (14 ms per string down, 10 ms up). The voice is dropped 0.4 s after release, or after 1.5 × T60.
+
+8. **Buffers are zero-initialized in `.bss` and explicitly zeroed in `patch_init` before use** (rather than shipped as zeros inside the patch image). The reverb/echo buffers were already separate all-zero statics in `.bss`. `patch_init` then clears each buffer static in place with `core::ptr::write_bytes` (no heap or `calloc` in `no_std`, and a zeroed copy would be a stack temporary) before `init`: the loader should already have cleared `.bss`, but nothing promises it, and a NaN left in a feedback loop never decays. The firmware working buffer stays unused.

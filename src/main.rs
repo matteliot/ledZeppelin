@@ -488,6 +488,16 @@ fn room() -> &'static mut Room {
     unsafe { &mut *ROOM.0.get() }
 }
 
+/// Zeroes a buffer static in place. The loader should already have cleared
+/// .bss, but nothing promises it, and a NaN left in a feedback loop never
+/// decays. (In place: a zeroed copy would be a large stack temporary.)
+///
+/// SAFETY: `T` must be made only of f32 and usize fields, so all-zero bits
+/// are a valid value; single-threaded as `state`.
+unsafe fn clear<T>(g: &Global<T>) {
+    unsafe { core::ptr::write_bytes(g.0.get(), 0, 1) }
+}
+
 // ---------------------------------------------------------------- entry points
 
 const PARAM_GAIN: i32 = 0;
@@ -497,6 +507,10 @@ const PARAM_LEVEL: i32 = 2;
 unsafe extern "C" fn patch_init(env: *const PatchEnv) {
     if env.is_null() || unsafe { (*env).abi_version } != PATCH_ABI_VERSION as u32 {
         return;
+    }
+    unsafe {
+        clear(&ECHO_TAPE);
+        clear(&ROOM);
     }
     state().init();
 }
@@ -650,6 +664,9 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
     }
 }
 
+#[cfg(not(target_os = "none"))]
+#[allow(dead_code)] // each demo uses only some of the playing techniques
+mod guitar;
 #[cfg(not(target_os = "none"))]
 mod host;
 
