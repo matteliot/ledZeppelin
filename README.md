@@ -47,6 +47,12 @@ cargo build --release        # ELF for the pedal (default target is thumbv7em-no
 cargo sim                    # -> target/render/led_zeppelin_demo.wav
 ```
 
-This renders an original E-minor blues-rock riff at 96 bpm, played on a modelled electric guitar (`src/guitar.rs`: exact tuning, pick and humbucker, palm mutes, strummed chords, slides, bends, vibrato and human timing), through the same patch code. It goes Plexi crunch → Gain backed off for ringing chords → Tone Bender → a lead line with the Echoplex
+This renders an original E-minor blues-rock riff at 96 bpm, played on a modelled electric guitar (`src/pedalkit/guitar.rs`: exact tuning, pick and humbucker, palm mutes, strummed chords, slides, bends, vibrato and human timing), through the same patch code. It goes Plexi crunch → Gain backed off for ringing chords → Tone Bender → a lead line with the Echoplex
 echo → echo off with the repeats ringing out, then prints the level of each section and a Gain-knob sweep showing how much the amp cleans up. A render is in
 [`samples/led_zeppelin_demo.wav`](samples/led_zeppelin_demo.wav).
+
+## Code layout
+
+- `src/led_zeppelin/`: the pedal. `patch.rs` wires it up, `presets.rs` holds every number, and the other files are its blocks.
+- `src/pedalkit/`: shared building blocks (effects, DSP, the Endless ABI, the entry points, the demo renderer). It's a copy of the master in [superPedal](https://github.com/matteliot/superPedal), which also carries this pedal, so don't edit it here.
+- `src/host/`: the `cargo sim` demo (`score.rs` is what it plays).
